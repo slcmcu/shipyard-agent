@@ -97,7 +97,9 @@ func updater(jobs <-chan *Job, group *sync.WaitGroup) {
 	}
 }
 
-func pushContainers(client *dockerclient.Client, jobs chan *Job, ready chan bool) {
+func pushContainers(client *dockerclient.Client, jobs chan *Job, group *sync.WaitGroup) {
+	group.Add(1)
+	defer group.Done()
 	containers, err := client.ListContainers(dockerclient.ListContainersOptions{All: true})
 	if err != nil {
 		log.Fatal(err)
@@ -116,10 +118,11 @@ func pushContainers(client *dockerclient.Client, jobs chan *Job, ready chan bool
 		Path: "/agent/containers/",
 		Data: data,
 	}
-	ready <- true
 }
 
-func pushImages(client *dockerclient.Client, jobs chan *Job, ready chan bool) {
+func pushImages(client *dockerclient.Client, jobs chan *Job, group *sync.WaitGroup) {
+	group.Add(1)
+	defer group.Done()
 	images, err := client.ListImages(false)
 	if err != nil {
 		log.Fatal(err)
@@ -129,12 +132,12 @@ func pushImages(client *dockerclient.Client, jobs chan *Job, ready chan bool) {
 		Path: "/agent/images/",
 		Data: images,
 	}
-	ready <- true
 }
 
 func listen(d time.Duration) {
 	var (
-		group = &sync.WaitGroup{}
+		updaterGroup = &sync.WaitGroup{}
+		pushGroup    = &sync.WaitGroup{}
 		// create chan with a 2 buffer, we use a 2 buffer to sync the go routines so that
 		// no more than two messages are being send to the server at one time
 		jobs = make(chan *Job, 2)
@@ -145,17 +148,16 @@ func listen(d time.Duration) {
 		log.Fatal(err)
 	}
 
-	go updater(jobs, group)
+	go updater(jobs, updaterGroup)
 
 	for _ = range time.Tick(d) {
-		ready := make(chan bool, 2)
-		go pushContainers(client, jobs, ready)
-		go pushImages(client, jobs, ready)
-		<-ready
+		go pushContainers(client, jobs, pushGroup)
+		go pushImages(client, jobs, pushGroup)
+		pushGroup.Wait()
 	}
 
 	// wait for all request to finish processing before returning
-	group.Wait()
+	updaterGroup.Wait()
 }
 
 // Registers with Shipyard at the specified URL
