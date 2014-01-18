@@ -148,7 +148,6 @@ func listen(d time.Duration) {
 	go updater(jobs, group)
 
 	for _ = range time.Tick(d) {
-		// TODO: is it ok for 10 of these to be running in parallel or do we need to wait?
 		ready := make(chan bool, 2)
 		go pushContainers(client, jobs, ready)
 		go pushImages(client, jobs, ready)
