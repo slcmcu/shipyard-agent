@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-const VERSION string = "0.0.4"
+const VERSION string = "0.0.5"
 
 var (
 	dockerURL     string
