@@ -6,9 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/dotcloud/docker"
-	"github.com/shipyard/go-dockerclient"
-	"io"
-	"io/ioutil"
+	dockerclient "github.com/shipyard/go-dockerclient"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -82,8 +80,8 @@ func updater(jobs <-chan *Job, group *sync.WaitGroup) {
 			log.Println(err)
 			continue
 		}
-
-		req, err := http.NewRequest("POST", path.Join(shipyardURL, obj.Path), buf)
+		s := []string{shipyardURL, obj.Path}
+		req, err := http.NewRequest("POST", strings.Join(s, ""), buf)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -99,7 +97,7 @@ func updater(jobs <-chan *Job, group *sync.WaitGroup) {
 	}
 }
 
-func pushContainers(client *dockerclient.Client, jobs chan *Job) {
+func pushContainers(client *dockerclient.Client, jobs chan *Job, ready chan bool) {
 	containers, err := client.ListContainers(dockerclient.ListContainersOptions{All: true})
 	if err != nil {
 		log.Fatal(err)
@@ -118,9 +116,10 @@ func pushContainers(client *dockerclient.Client, jobs chan *Job) {
 		Path: "/agent/containers/",
 		Data: data,
 	}
+	ready <- true
 }
 
-func pushImages(client *dockerclient.Client, jobs chan *Job) {
+func pushImages(client *dockerclient.Client, jobs chan *Job, ready chan bool) {
 	images, err := client.ListImages(false)
 	if err != nil {
 		log.Fatal(err)
@@ -130,6 +129,7 @@ func pushImages(client *dockerclient.Client, jobs chan *Job) {
 		Path: "/agent/images/",
 		Data: images,
 	}
+	ready <- true
 }
 
 func listen(d time.Duration) {
@@ -147,10 +147,12 @@ func listen(d time.Duration) {
 
 	go updater(jobs, group)
 
-	for _ := range time.Tick(d) {
+	for _ = range time.Tick(d) {
 		// TODO: is it ok for 10 of these to be running in parallel or do we need to wait?
-		go pushContainers(client, jobs)
-		go pushImages(client, jobs)
+		ready := make(chan bool, 2)
+		go pushContainers(client, jobs, ready)
+		go pushImages(client, jobs, ready)
+		<-ready
 	}
 
 	// wait for all request to finish processing before returning
@@ -194,7 +196,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Printf("Shipyard Agetn (%s)\n", shipyardURL)
+	log.Printf("Shipyard Agent (%s)\n", shipyardURL)
 	u, err := url.Parse(dockerURL)
 	if err != nil {
 		log.Fatal(err)
