@@ -12,14 +12,13 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"path"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
-const VERSION string = "0.0.5"
+const VERSION string = "0.0.6"
 
 var (
 	dockerURL     string
@@ -174,7 +173,8 @@ func register() {
 		data AgentData
 	)
 
-	resp, err := http.PostForm(path.Join(shipyardURL, "agent", "register"), vals)
+        rURL := fmt.Sprintf("%v/agent/register/", shipyardURL)
+	resp, err := http.PostForm(rURL, vals)
 	if err != nil {
 		log.Fatal(err)
 	}
