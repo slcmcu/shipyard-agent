@@ -173,7 +173,7 @@ func register() {
 		data AgentData
 	)
 
-        rURL := fmt.Sprintf("%v/agent/register/", shipyardURL)
+	rURL := fmt.Sprintf("%v/agent/register/", shipyardURL)
 	resp, err := http.PostForm(rURL, vals)
 	if err != nil {
 		log.Fatal(err)
