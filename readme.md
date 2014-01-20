@@ -8,7 +8,6 @@ Visit the [Releases](https://github.com/shipyard/shipyard-agent/releases) page f
 
 ```
 curl curl https://github.com/shipyard/shipyard-agent/releases/download/<release>/shipyard-agent -L -o /usr/local/bin/shipyard-agent
-
 chmod +x /usr/local/bin/shipyard-agent
 ```
 
