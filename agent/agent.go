@@ -187,6 +187,8 @@ func register() {
 }
 
 func main() {
+        mem := getMemUsage(32438)
+        fmt.Printf("Memory: %v\n", mem)
 	if registerAgent {
 		register()
 		return
