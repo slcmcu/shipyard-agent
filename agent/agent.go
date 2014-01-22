@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-const VERSION string = "0.0.7"
+const VERSION string = "0.0.8"
 
 var (
 	dockerURL     string
@@ -106,6 +106,7 @@ func updater(jobs <-chan *Job, group *sync.WaitGroup) {
 func getContainers() []*docker.APIContainers {
 	path := fmt.Sprintf("%s/containers/json?all=1", dockerURL)
 	resp, err := http.Get(path)
+        defer resp.Body.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -122,6 +123,7 @@ func getContainers() []*docker.APIContainers {
 func inspectContainer(id string) *docker.Container {
 	path := fmt.Sprintf("%s/containers/%s/json?all=1", dockerURL, id)
 	resp, err := http.Get(path)
+        defer resp.Body.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -138,6 +140,7 @@ func inspectContainer(id string) *docker.Container {
 func getImages() []*Image {
 	path := fmt.Sprintf("%s/images/json?all=0", dockerURL)
 	resp, err := http.Get(path)
+        defer resp.Body.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
