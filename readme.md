@@ -7,7 +7,7 @@ The Shipyard Agent will gather Docker information (containers, images, etc.) fro
 Visit the [Releases](https://github.com/shipyard/shipyard-agent/releases) page for the latest release.  Download the binary and install to your Docker host.  For example:
 
 ```
-curl curl https://github.com/shipyard/shipyard-agent/releases/download/<release>/shipyard-agent -L -o /usr/local/bin/shipyard-agent
+curl https://github.com/shipyard/shipyard-agent/releases/download/<release>/shipyard-agent -L -o /usr/local/bin/shipyard-agent
 chmod +x /usr/local/bin/shipyard-agent
 ```
 
