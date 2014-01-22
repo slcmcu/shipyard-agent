@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"github.com/dotcloud/docker"
-	dockerclient "github.com/shipyard/go-dockerclient"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -18,7 +17,7 @@ import (
 	"time"
 )
 
-const VERSION string = "0.0.6"
+const VERSION string = "0.0.7"
 
 var (
 	dockerURL     string
@@ -44,10 +43,18 @@ type (
 		Path string
 		Data interface{}
 	}
+
+	Image struct {
+		Id          string
+		Created     int
+		RepoTags    []string
+		Size        int
+		VirtualSize int
+	}
 )
 
 func init() {
-	flag.StringVar(&dockerURL, "host", "http://127.0.0.1:4243", "Docker URL")
+	flag.StringVar(&dockerURL, "docker", "http://127.0.0.1:4243", "URL to Docker")
 	flag.StringVar(&shipyardURL, "url", "", "Shipyard URL")
 	flag.StringVar(&shipyardKey, "key", "", "Shipyard Agent Key")
 	flag.IntVar(&runInterval, "interval", 5, "Run interval")
@@ -96,20 +103,62 @@ func updater(jobs <-chan *Job, group *sync.WaitGroup) {
 	}
 }
 
-func pushContainers(client *dockerclient.Client, jobs chan *Job, group *sync.WaitGroup) {
-	group.Add(1)
-	defer group.Done()
-	containers, err := client.ListContainers(dockerclient.ListContainersOptions{All: true})
+func getContainers() []*docker.APIContainers {
+	path := fmt.Sprintf("%s/containers/json?all=1", dockerURL)
+	resp, err := http.Get(path)
 	if err != nil {
 		log.Fatal(err)
 	}
-	data := make([]ContainerData, len(containers))
-	for x, c := range containers {
-		i, err := client.InspectContainer(c.ID)
-		if err != nil {
+	var containers []*docker.APIContainers
+	if resp.StatusCode == http.StatusOK {
+		d := json.NewDecoder(resp.Body)
+		if err = d.Decode(&containers); err != nil {
 			log.Fatal(err)
 		}
-		containerData := ContainerData{Container: c, Meta: i}
+	}
+	return containers
+}
+
+func inspectContainer(id string) *docker.Container {
+	path := fmt.Sprintf("%s/containers/%s/json?all=1", dockerURL, id)
+	resp, err := http.Get(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var container *docker.Container
+	if resp.StatusCode == http.StatusOK {
+		d := json.NewDecoder(resp.Body)
+		if err = d.Decode(&container); err != nil {
+			log.Fatal(err)
+		}
+	}
+	return container
+}
+
+func getImages() []*Image {
+	path := fmt.Sprintf("%s/images/json?all=0", dockerURL)
+	resp, err := http.Get(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var images []*Image
+	if resp.StatusCode == http.StatusOK {
+		d := json.NewDecoder(resp.Body)
+		if err = d.Decode(&images); err != nil {
+			log.Fatal(err)
+		}
+	}
+	return images
+}
+
+func pushContainers(jobs chan *Job, group *sync.WaitGroup) {
+	group.Add(1)
+	defer group.Done()
+	containers := getContainers()
+	data := make([]ContainerData, len(containers))
+	for x, c := range containers {
+		i := inspectContainer(c.ID)
+		containerData := ContainerData{Container: *c, Meta: i}
 		data[x] = containerData
 	}
 
@@ -119,14 +168,10 @@ func pushContainers(client *dockerclient.Client, jobs chan *Job, group *sync.Wai
 	}
 }
 
-func pushImages(client *dockerclient.Client, jobs chan *Job, group *sync.WaitGroup) {
+func pushImages(jobs chan *Job, group *sync.WaitGroup) {
 	group.Add(1)
 	defer group.Done()
-	images, err := client.ListImages(false)
-	if err != nil {
-		log.Fatal(err)
-	}
-
+	images := getImages()
 	jobs <- &Job{
 		Path: "/agent/images/",
 		Data: images,
@@ -142,16 +187,11 @@ func listen(d time.Duration) {
 		jobs = make(chan *Job, 2)
 	)
 
-	client, err := dockerclient.NewClient(dockerURL)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	go updater(jobs, updaterGroup)
 
 	for _ = range time.Tick(d) {
-		go pushContainers(client, jobs, pushGroup)
-		go pushImages(client, jobs, pushGroup)
+		go pushContainers(jobs, pushGroup)
+		go pushImages(jobs, pushGroup)
 		pushGroup.Wait()
 	}
 
