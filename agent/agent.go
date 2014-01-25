@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/dotcloud/docker"
 	"log"
+        "net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -17,7 +18,7 @@ import (
 	"time"
 )
 
-const VERSION string = "0.0.8"
+const VERSION string = "0.0.9"
 
 var (
 	dockerURL     string
@@ -204,17 +205,42 @@ func listen(d time.Duration) {
 
 // Registers with Shipyard at the specified URL
 func register() {
-	log.Printf("Registering at %s\n", shipyardURL)
-
 	hostname, err := os.Hostname()
 	if err != nil {
 		log.Fatal(err)
 	}
 
+        addrs, err := net.InterfaceAddrs()
+        if err != nil {
+            log.Fatal(err)
+        }
+        blockedIPs := map[string]bool {
+            "127.0.0.1": false,
+            "172.17.42.1": false,
+        }
+        var hostIP string
+        for _, addr := range addrs {
+            ip, _, err := net.ParseCIDR(addr.String())
+            if err != nil {
+                log.Fatal(err)
+            }
+            // filter loopback
+            if ! ip.IsLoopback() {
+                _, blocked := blockedIPs[string(ip)]
+                if ! blocked {
+                    hostIP = ip.String()
+                    break
+                }
+            }
+        }
+
 	var (
-		vals = url.Values{"name": {hostname}, "port": {strconv.Itoa(port)}}
+                vals = url.Values{"name": {hostname}, "port": {strconv.Itoa(port)}, "hostname": {hostIP}}
 		data AgentData
 	)
+        log.Printf("Using %s for the Docker Host IP for Shipyard\n", hostIP)
+        log.Println("If this is not correct or you want to use a different IP, please update the host in Shipyard")
+	log.Printf("Registering at %s\n", shipyardURL)
 
 	rURL := fmt.Sprintf("%v/agent/register/", shipyardURL)
 	resp, err := http.PostForm(rURL, vals)
