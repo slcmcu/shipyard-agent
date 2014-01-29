@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"github.com/dotcloud/docker"
 	"log"
-        "net"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -107,7 +107,7 @@ func updater(jobs <-chan *Job, group *sync.WaitGroup) {
 func getContainers() []*docker.APIContainers {
 	path := fmt.Sprintf("%s/containers/json?all=1", dockerURL)
 	resp, err := http.Get(path)
-        defer resp.Body.Close()
+	defer resp.Body.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func getContainers() []*docker.APIContainers {
 func inspectContainer(id string) *docker.Container {
 	path := fmt.Sprintf("%s/containers/%s/json?all=1", dockerURL, id)
 	resp, err := http.Get(path)
-        defer resp.Body.Close()
+	defer resp.Body.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -141,7 +141,7 @@ func inspectContainer(id string) *docker.Container {
 func getImages() []*Image {
 	path := fmt.Sprintf("%s/images/json?all=0", dockerURL)
 	resp, err := http.Get(path)
-        defer resp.Body.Close()
+	defer resp.Body.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -210,36 +210,36 @@ func register() {
 		log.Fatal(err)
 	}
 
-        addrs, err := net.InterfaceAddrs()
-        if err != nil {
-            log.Fatal(err)
-        }
-        blockedIPs := map[string]bool {
-            "127.0.0.1": false,
-            "172.17.42.1": false,
-        }
-        var hostIP string
-        for _, addr := range addrs {
-            ip, _, err := net.ParseCIDR(addr.String())
-            if err != nil {
-                log.Fatal(err)
-            }
-            // filter loopback
-            if ! ip.IsLoopback() {
-                _, blocked := blockedIPs[string(ip)]
-                if ! blocked {
-                    hostIP = ip.String()
-                    break
-                }
-            }
-        }
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		log.Fatal(err)
+	}
+	blockedIPs := map[string]bool{
+		"127.0.0.1":   false,
+		"172.17.42.1": false,
+	}
+	var hostIP string
+	for _, addr := range addrs {
+		ip, _, err := net.ParseCIDR(addr.String())
+		if err != nil {
+			log.Fatal(err)
+		}
+		// filter loopback
+		if !ip.IsLoopback() {
+			_, blocked := blockedIPs[string(ip)]
+			if !blocked {
+				hostIP = ip.String()
+				break
+			}
+		}
+	}
 
 	var (
-                vals = url.Values{"name": {hostname}, "port": {strconv.Itoa(port)}, "hostname": {hostIP}}
+		vals = url.Values{"name": {hostname}, "port": {strconv.Itoa(port)}, "hostname": {hostIP}}
 		data AgentData
 	)
-        log.Printf("Using %s for the Docker Host IP for Shipyard\n", hostIP)
-        log.Println("If this is not correct or you want to use a different IP, please update the host in Shipyard")
+	log.Printf("Using %s for the Docker Host IP for Shipyard\n", hostIP)
+	log.Println("If this is not correct or you want to use a different IP, please update the host in Shipyard")
 	log.Printf("Registering at %s\n", shipyardURL)
 
 	rURL := fmt.Sprintf("%v/agent/register/", shipyardURL)
