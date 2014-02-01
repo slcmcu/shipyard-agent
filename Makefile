@@ -3,6 +3,8 @@ all:
 	@cd ./agent && go build -o ../shipyard-agent
 
 fmt:
-	@cd ./agent && go fmt
+	@go fmt ./...
+test:
+	@go test ./...
 clean:
 	@rm -rf shipyard-agent

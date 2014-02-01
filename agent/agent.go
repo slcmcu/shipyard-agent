@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/dotcloud/docker"
+	"github.com/shipyard/shipyard-agent/utils"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -17,7 +18,7 @@ import (
 	"time"
 )
 
-const VERSION string = "0.0.7"
+const VERSION string = "0.1.0"
 
 var (
 	dockerURL     string
@@ -151,6 +152,11 @@ func getImages() []*Image {
 	return images
 }
 
+func getContainerMetrics() []utils.ContainerMetric {
+	containerMetrics := utils.GetContainerMetrics()
+	return containerMetrics
+}
+
 func pushContainers(jobs chan *Job, group *sync.WaitGroup) {
 	group.Add(1)
 	defer group.Done()
@@ -178,13 +184,23 @@ func pushImages(jobs chan *Job, group *sync.WaitGroup) {
 	}
 }
 
+func pushContainerMetrics(jobs chan *Job, group *sync.WaitGroup) {
+	group.Add(1)
+	defer group.Done()
+	metrics := getContainerMetrics()
+	jobs <- &Job{
+		Path: "/agent/metrics/",
+		Data: metrics,
+	}
+}
+
 func listen(d time.Duration) {
 	var (
 		updaterGroup = &sync.WaitGroup{}
 		pushGroup    = &sync.WaitGroup{}
-		// create chan with a 2 buffer, we use a 2 buffer to sync the go routines so that
-		// no more than two messages are being send to the server at one time
-		jobs = make(chan *Job, 2)
+		// create chan with a 3 buffer, we use a 3 buffer to sync the go routines so that
+		// no more than 3 messages are being send to the server at one time
+		jobs = make(chan *Job, 3)
 	)
 
 	go updater(jobs, updaterGroup)
@@ -192,6 +208,7 @@ func listen(d time.Duration) {
 	for _ = range time.Tick(d) {
 		go pushContainers(jobs, pushGroup)
 		go pushImages(jobs, pushGroup)
+		go pushContainerMetrics(jobs, pushGroup)
 		pushGroup.Wait()
 	}
 
@@ -227,8 +244,8 @@ func register() {
 }
 
 func main() {
-        mem := getMemUsage(32438)
-        fmt.Printf("Memory: %v\n", mem)
+	mem := getMemUsage(32438)
+	fmt.Printf("Memory: %v\n", mem)
 	if registerAgent {
 		register()
 		return
