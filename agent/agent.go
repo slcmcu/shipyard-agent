@@ -70,14 +70,10 @@ func init() {
 		os.Exit(0)
 	}
 
-}
-
-func newClient(path string) (*httputil.ClientConn, error) {
-    conn, err := net.Dial("unix", path)
-    if err != nil {
-        return nil, err
-    }
-    return httputil.NewClientConn(conn, nil), nil
+	if shipyardURL == "" {
+		fmt.Println("Error: You must specify a Shipyard URL")
+		os.Exit(1)
+	}
 }
 
 func updater(jobs <-chan *Job, group *sync.WaitGroup) {
@@ -109,23 +105,12 @@ func updater(jobs <-chan *Job, group *sync.WaitGroup) {
 }
 
 func getContainers() []*docker.APIContainers {
-	path := fmt.Sprintf("/containers/json?all=1")
-        c, err := newClient(dockerURL)
+	path := fmt.Sprintf("%s/containers/json?all=1", dockerURL)
+	resp, err := http.Get(path)
+	defer resp.Body.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer c.Close()
-        req, err := http.NewRequest("GET", path, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-        resp, err := c.Do(req)
-        if err != nil {
-		log.Fatal(err)
-        }
-        defer resp.Body.Close()
-    
 	var containers []*docker.APIContainers
 	if resp.StatusCode == http.StatusOK {
 		d := json.NewDecoder(resp.Body)
@@ -137,23 +122,12 @@ func getContainers() []*docker.APIContainers {
 }
 
 func inspectContainer(id string) *docker.Container {
-        path := fmt.Sprintf("/containers/%s/json?all=1", id)
-        c, err := newClient(dockerURL)
+	path := fmt.Sprintf("%s/containers/%s/json?all=1", dockerURL, id)
+	resp, err := http.Get(path)
+	defer resp.Body.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer c.Close()
-        req, err := http.NewRequest("GET", path, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-        resp, err := c.Do(req)
-        if err != nil {
-		log.Fatal(err)
-        }
-        defer resp.Body.Close()
-    
 	var container *docker.Container
 	if resp.StatusCode == http.StatusOK {
 		d := json.NewDecoder(resp.Body)
@@ -165,23 +139,12 @@ func inspectContainer(id string) *docker.Container {
 }
 
 func getImages() []*Image {
-        path := "/images/json?all=0"
-        c, err := newClient(dockerURL)
+	path := fmt.Sprintf("%s/images/json?all=0", dockerURL)
+	resp, err := http.Get(path)
+	defer resp.Body.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer c.Close()
-        req, err := http.NewRequest("GET", path, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-        resp, err := c.Do(req)
-        if err != nil {
-		log.Fatal(err)
-        }
-        defer resp.Body.Close()
-        
 	var images []*Image
 	if resp.StatusCode == http.StatusOK {
 		d := json.NewDecoder(resp.Body)
@@ -241,7 +204,7 @@ func listen(d time.Duration) {
 }
 
 // Registers with Shipyard at the specified URL
-func register() string {
+func register() {
 	hostname, err := os.Hostname()
 	if err != nil {
 		log.Fatal(err)
@@ -290,24 +253,18 @@ func register() string {
 		log.Fatal(err)
 	}
 	log.Println("Agent Key: ", data.Key)
-        return data.Key
 }
 
 func main() {
+	if registerAgent {
+		register()
+		return
+	}
+
 	duration, err := time.ParseDuration(fmt.Sprintf("%ds", runInterval))
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	if shipyardURL == "" {
-		fmt.Println("Error: You must specify a Shipyard URL")
-		os.Exit(1)
-	}
-
-	if registerAgent {
-		shipyardKey = register()
-	}
-
 
 	log.Printf("Shipyard Agent (%s)\n", shipyardURL)
 	u, err := url.Parse(dockerURL)
