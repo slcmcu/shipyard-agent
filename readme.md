@@ -1,15 +1,26 @@
 # Shipyard Agent
-This is the Shipyard Agent.
+This is the Shipyard Agent.  It goes on your Docker hosts.
 
 The Shipyard Agent will gather Docker information (containers, images, etc.) from the local Docker and push it to a Shipyard instance.
 
+# Installation
+Visit the [Releases](https://github.com/shipyard/shipyard-agent/releases) page for the latest release.  Download the binary and install to your Docker host.  For example:
+
+```
+curl https://github.com/shipyard/shipyard-agent/releases/download/<release>/shipyard-agent -L -o /usr/local/bin/shipyard-agent
+chmod +x /usr/local/bin/shipyard-agent
+```
+
 # Usage
-Run this in a Docker container (note the `-v` to bind mount the Docker socket for the agent):
+The first time you run the agent you must register it with Shipyard.  You can combine this for the first run and it will register automatically:
 
-`docker run -i -t -v /var/run/docker.sock:/docker.sock shipyard/agent -url http://<shipyard-host>:<shipyard-port> -docker /docker.sock -register`
+`./shipyard-agent -url http://myshipyardhost:shipyardport -register`
 
-This will cause the Agent container to register and run.  In Shipyard, click on the 
-action menu for the host and select "Authorize Host" to enable.
+You will then need to authorize the host in 
+Shipyard.  Login to your Shipyard instance and select "Hosts".  Click on the 
+action menu for the host and select "Authorize Host".
 
-If you wish to restart the agent, simply omit the `-register` and use the key from the output of the first container with `-key`.
+Subsequent agent runs just need the key:
+
+`./shipyard-agent -url http://myshipyardhost:shipyardport -key 1234567890qwertyuiop`
 

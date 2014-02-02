@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-const VERSION string = "0.0.9"
+const VERSION string = "0.1.0"
 
 var (
 	dockerURL     string
@@ -55,7 +55,7 @@ type (
 )
 
 func init() {
-	flag.StringVar(&dockerURL, "docker", "http://127.0.0.1:4243", "URL to Docker")
+        flag.StringVar(&dockerURL, "docker", "http://127.0.0.1:4243", "URL to Docker")
 	flag.StringVar(&shipyardURL, "url", "", "Shipyard URL")
 	flag.StringVar(&shipyardKey, "key", "", "Shipyard Agent Key")
 	flag.IntVar(&runInterval, "interval", 5, "Run interval")
@@ -68,11 +68,6 @@ func init() {
 	if version {
 		fmt.Println(VERSION)
 		os.Exit(0)
-	}
-
-	if shipyardURL == "" {
-		fmt.Println("Error: You must specify a Shipyard URL")
-		os.Exit(1)
 	}
 }
 
@@ -204,7 +199,7 @@ func listen(d time.Duration) {
 }
 
 // Registers with Shipyard at the specified URL
-func register() {
+func register() string {
 	hostname, err := os.Hostname()
 	if err != nil {
 		log.Fatal(err)
@@ -253,6 +248,7 @@ func register() {
 		log.Fatal(err)
 	}
 	log.Println("Agent Key: ", data.Key)
+        return data.Key
 }
 
 func main() {
@@ -265,6 +261,16 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	if shipyardURL == "" {
+		fmt.Println("Error: You must specify a Shipyard URL")
+		os.Exit(1)
+	}
+
+	if registerAgent && shipyardKey == "" {
+		shipyardKey = register()
+	}
+
 
 	log.Printf("Shipyard Agent (%s)\n", shipyardURL)
 	u, err := url.Parse(dockerURL)
