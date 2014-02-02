@@ -252,11 +252,6 @@ func register() string {
 }
 
 func main() {
-	if registerAgent {
-		register()
-		return
-	}
-
 	duration, err := time.ParseDuration(fmt.Sprintf("%ds", runInterval))
 	if err != nil {
 		log.Fatal(err)
