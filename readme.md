@@ -6,7 +6,7 @@ The Shipyard Agent will gather Docker information (containers, images, etc.) fro
 # Usage
 Run this in a Docker container (note the `-v` to bind mount the Docker socket for the agent):
 
-`docker run -i -t -rm -v /var/run/docker.sock:/docker.sock shipyard/agent -url http://<shipyard-host>:<shipyard-port> -docker /docker.sock -register`
+`docker run -i -t -v /var/run/docker.sock:/docker.sock shipyard/agent -url http://<shipyard-host>:<shipyard-port> -docker /docker.sock -register`
 
 This will cause the Agent container to register and run.  In Shipyard, click on the 
 action menu for the host and select "Authorize Host" to enable.
