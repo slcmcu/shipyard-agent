@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/dotcloud/docker"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -322,77 +321,22 @@ func dockerHandler(w http.ResponseWriter, req *http.Request) {
 		log.Printf("Error requesting %s from Docker: %s", path, err)
 		return
 	}
-	w.WriteHeader(resp.StatusCode)
-	content, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("Error parsing response from Docker: %s", err)
-		return
-	}
-	w.Write([]byte(content))
-}
-
-type UnixHandler struct {
-	path string
-}
-
-func (h *UnixHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	conn, err := net.Dial("unix", h.path)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("Error connecting to unix socket: %s", err)
-		return
-	}
-	c := httputil.NewClientConn(conn, nil)
-	defer c.Close()
-
-	res, err := c.Do(r)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("Error client.Do: %s", err)
-		return
-	}
-	defer res.Body.Close()
-
-	copyHeader(w.Header(), res.Header)
-	if _, err := io.Copy(w, res.Body); err != nil {
-		log.Printf("Error io.Copy body: %s", err)
-	}
+        copyResponse(resp, w)
 }
 
 func copyHeader(dst, src http.Header) {
-	for k, vv := range src {
-		for _, v := range vv {
-			dst.Add(k, v)
-		}
-	}
+    for k, vv := range src {
+        for _, v := range vv {
+            dst.Add(k, v)
+        }
+    }
 }
 
-func createTcpHandler(e string) http.Handler {
-	u, err := url.Parse(e)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return httputil.NewSingleHostReverseProxy(u)
-}
-
-func createUnixHandler(e string) http.Handler {
-	return &UnixHandler{e}
-}
-
-func createHandler(e string) http.Handler {
-	var (
-		mux = http.NewServeMux()
-		h   http.Handler
-	)
-
-	if strings.Contains(e, "http") {
-		h = createTcpHandler(e)
-	} else {
-		h = createUnixHandler(e)
-	}
-
-	mux.Handle("/", h)
-	return mux
+func copyResponse(r *http.Response, w http.ResponseWriter) {
+    copyHeader(w.Header(), r.Header)
+    w.WriteHeader(r.StatusCode)
+    io.Copy(w, r.Body)
+    r.Body.Close()
 }
 
 func main() {
@@ -414,6 +358,6 @@ func main() {
 
 	go listen(duration)
 
-	handler := createHandler(dockerPath)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf("%s:%d", address, port), handler))
+        http.HandleFunc("/", dockerHandler)
+	log.Fatal(http.ListenAndServe(fmt.Sprintf("%s:%d", address, port), nil))
 }
