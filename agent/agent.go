@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-const VERSION string = "0.1.0"
+const VERSION string = "0.1.1"
 
 var (
 	dockerURL     string
@@ -27,6 +27,7 @@ var (
 	runInterval   int
 	registerAgent bool
 	version       bool
+        address       string
 	port          int
 )
 
@@ -34,9 +35,26 @@ type (
 	AgentData struct {
 		Key string `json:"key"`
 	}
+	Port struct {
+		IP          string
+		PrivatePort int
+		PublicPort  int
+		Type        string
+	}
+
+	APIContainer struct {
+		Id      string
+		Created int
+		Image   string
+		Status  string
+		Command string
+		Ports   []Port
+		Names   []string
+	}
+
 
 	ContainerData struct {
-		Container docker.APIContainers
+		Container APIContainer
 		Meta      *docker.Container
 	}
 
@@ -61,6 +79,7 @@ func init() {
 	flag.IntVar(&runInterval, "interval", 5, "Run interval")
 	flag.BoolVar(&registerAgent, "register", false, "Register Agent with Shipyard")
 	flag.BoolVar(&version, "version", false, "Shows Agent Version")
+        flag.StringVar(&address, "address", "", "Agent Listen Address (default: 0.0.0.0)")
 	flag.IntVar(&port, "port", 4500, "Agent Listen Port")
 
 	flag.Parse()
@@ -79,38 +98,38 @@ func updater(jobs <-chan *Job, group *sync.WaitGroup) {
 	for obj := range jobs {
 		buf := bytes.NewBuffer(nil)
 		if err := json.NewEncoder(buf).Encode(obj.Data); err != nil {
-			log.Println(err)
+                    log.Printf("Error decoding JSON: %s", err)
 			continue
 		}
 		s := []string{shipyardURL, obj.Path}
 		req, err := http.NewRequest("POST", strings.Join(s, ""), buf)
 		if err != nil {
-			log.Println(err)
+                    log.Printf("Error sending to Shipyard: %s", err)
 			continue
 		}
 
 		req.Header.Set("Authorization", fmt.Sprintf("AgentKey:%s", shipyardKey))
 		resp, err := client.Do(req)
 		if err != nil {
-			log.Println(err)
+                    log.Printf("Error sending to Shipyard: %s", err)
 			continue
 		}
 		defer resp.Body.Close()
 	}
 }
 
-func getContainers() []*docker.APIContainers {
+func getContainers() []APIContainer {
 	path := fmt.Sprintf("%s/containers/json?all=1", dockerURL)
 	resp, err := http.Get(path)
 	defer resp.Body.Close()
 	if err != nil {
-		log.Fatal(err)
+            log.Fatalf("Error requesting containers from Docker: %s", err)
 	}
-	var containers []*docker.APIContainers
+	var containers []APIContainer
 	if resp.StatusCode == http.StatusOK {
 		d := json.NewDecoder(resp.Body)
 		if err = d.Decode(&containers); err != nil {
-			log.Fatal(err)
+                    log.Fatalf("Error parsing container JSON from Docker: %s", err)
 		}
 	}
 	return containers
@@ -121,13 +140,13 @@ func inspectContainer(id string) *docker.Container {
 	resp, err := http.Get(path)
 	defer resp.Body.Close()
 	if err != nil {
-		log.Fatal(err)
+            log.Fatalf("Error inspecting container %s from Docker: %s", id, err)
 	}
 	var container *docker.Container
 	if resp.StatusCode == http.StatusOK {
 		d := json.NewDecoder(resp.Body)
 		if err = d.Decode(&container); err != nil {
-			log.Fatal(err)
+                    log.Fatalf("Error parsing container JSON: %s", err)
 		}
 	}
 	return container
@@ -138,13 +157,13 @@ func getImages() []*Image {
 	resp, err := http.Get(path)
 	defer resp.Body.Close()
 	if err != nil {
-		log.Fatal(err)
+            log.Fatalf("Error requesting images from Docker: %s", err)
 	}
 	var images []*Image
 	if resp.StatusCode == http.StatusOK {
 		d := json.NewDecoder(resp.Body)
 		if err = d.Decode(&images); err != nil {
-			log.Fatal(err)
+                    log.Fatalf("Error parsing image JSON: %s", err)
 		}
 	}
 	return images
@@ -156,8 +175,8 @@ func pushContainers(jobs chan *Job, group *sync.WaitGroup) {
 	containers := getContainers()
 	data := make([]ContainerData, len(containers))
 	for x, c := range containers {
-		i := inspectContainer(c.ID)
-		containerData := ContainerData{Container: *c, Meta: i}
+		i := inspectContainer(c.Id)
+		containerData := ContainerData{Container: c, Meta: i}
 		data[x] = containerData
 	}
 
@@ -202,12 +221,12 @@ func listen(d time.Duration) {
 func register() string {
 	hostname, err := os.Hostname()
 	if err != nil {
-		log.Fatal(err)
+            log.Fatalf("Error registering with Shipyard: %s", err)
 	}
 
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
-		log.Fatal(err)
+            log.Fatalf("Error finding network interface addresses: %s", err)
 	}
 	blockedIPs := map[string]bool{
 		"127.0.0.1":   false,
@@ -217,7 +236,7 @@ func register() string {
 	for _, addr := range addrs {
 		ip, _, err := net.ParseCIDR(addr.String())
 		if err != nil {
-			log.Fatal(err)
+                    log.Fatalf("Error parsing CIDR from network address: %s", err)
 		}
 		// filter loopback
 		if !ip.IsLoopback() {
@@ -240,12 +259,12 @@ func register() string {
 	rURL := fmt.Sprintf("%v/agent/register/", shipyardURL)
 	resp, err := http.PostForm(rURL, vals)
 	if err != nil {
-		log.Fatal(err)
+            log.Fatalf("Error registering with Shipyard: %s", err)
 	}
 	defer resp.Body.Close()
 
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		log.Fatal(err)
+            log.Fatalf("Error parsing JSON from Shipyard register: %s", err)
 	}
 	log.Println("Agent Key: ", data.Key)
         return data.Key
@@ -254,7 +273,7 @@ func register() string {
 func main() {
 	duration, err := time.ParseDuration(fmt.Sprintf("%ds", runInterval))
 	if err != nil {
-		log.Fatal(err)
+            log.Fatal("Error parsing duration: %s", err)
 	}
 
 	if shipyardURL == "" {
@@ -268,9 +287,10 @@ func main() {
 
 
 	log.Printf("Shipyard Agent (%s)\n", shipyardURL)
+        log.Printf("Listening on %s:%d", address, port)
 	u, err := url.Parse(dockerURL)
 	if err != nil {
-		log.Fatal(err)
+            log.Fatalf("Error connecting to Docker (is Docker listening on TCP?): %s", err)
 	}
 
 	var (
@@ -286,7 +306,7 @@ func main() {
 
 	go listen(duration)
 
-	if err := http.ListenAndServe(fmt.Sprintf(":%d", port), proxy); err != nil {
-		log.Fatal(err)
+	if err := http.ListenAndServe(fmt.Sprintf("%s:%d", address, port), proxy); err != nil {
+            log.Fatalf("Error listening on port %d: %s", port, err)
 	}
 }
