@@ -12,15 +12,15 @@ chmod +x /usr/local/bin/shipyard-agent
 ```
 
 # Usage
-You first need to register with your Shipyard instance.  You can do this via:
+The first time you run the agent you must register it with Shipyard.  You can combine this for the first run and it will register automatically:
 
-`./shipyard-agent -url http://myshipyardhost -register`
+`./shipyard-agent -url http://myshipyardhost:shipyardport -register`
 
-It will output an "agent key".  You will then need to authorize the host in 
+You will then need to authorize the host in 
 Shipyard.  Login to your Shipyard instance and select "Hosts".  Click on the 
 action menu for the host and select "Authorize Host".
 
-Once authorized, you can start the agent:
+Subsequent agent runs just need the key:
 
-`./shipyard-agent -url http://myshipyardhost -key 1234567890qwertyuiop`
+`./shipyard-agent -url http://myshipyardhost:shipyardport -key 1234567890qwertyuiop`
 
