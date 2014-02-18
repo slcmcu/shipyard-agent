@@ -26,6 +26,7 @@ var (
 	shipyardURL   string
 	shipyardKey   string
 	runInterval   int
+	metricInterval   int
 	registerAgent bool
 	version       bool
         address       string
@@ -77,7 +78,8 @@ func init() {
         flag.StringVar(&dockerURL, "docker", "http://127.0.0.1:4243", "URL to Docker")
 	flag.StringVar(&shipyardURL, "url", "", "Shipyard URL")
 	flag.StringVar(&shipyardKey, "key", "", "Shipyard Agent Key")
-	flag.IntVar(&runInterval, "interval", 5, "Run interval")
+	flag.IntVar(&runInterval, "interval", 5, "Run interval (seconds)")
+	flag.IntVar(&metricInterval, "metric-interval", 60, "Metric interval (seconds)")
 	flag.BoolVar(&registerAgent, "register", false, "Register Agent with Shipyard")
 	flag.BoolVar(&version, "version", false, "Shows Agent Version")
         flag.StringVar(&address, "address", "", "Agent Listen Address (default: 0.0.0.0)")
@@ -115,14 +117,13 @@ func updater(jobs <-chan *Job, group *sync.WaitGroup) {
                     log.Printf("Error sending to Shipyard: %s", err)
 			continue
 		}
-		defer resp.Body.Close()
+		resp.Body.Close()
 	}
 }
 
 func getContainers() []APIContainer {
 	path := fmt.Sprintf("%s/containers/json?all=1", dockerURL)
 	resp, err := http.Get(path)
-	defer resp.Body.Close()
 	if err != nil {
             log.Fatalf("Error requesting containers from Docker: %s", err)
 	}
@@ -133,13 +134,13 @@ func getContainers() []APIContainer {
                     log.Fatalf("Error parsing container JSON from Docker: %s", err)
 		}
 	}
+	resp.Body.Close()
 	return containers
 }
 
 func inspectContainer(id string) *docker.Container {
 	path := fmt.Sprintf("%s/containers/%s/json?all=1", dockerURL, id)
 	resp, err := http.Get(path)
-	defer resp.Body.Close()
 	if err != nil {
             log.Fatalf("Error inspecting container %s from Docker: %s", id, err)
 	}
@@ -150,13 +151,13 @@ func inspectContainer(id string) *docker.Container {
                     log.Fatalf("Error parsing container JSON: %s", err)
 		}
 	}
+	resp.Body.Close()
 	return container
 }
 
 func getImages() []*Image {
 	path := fmt.Sprintf("%s/images/json?all=0", dockerURL)
 	resp, err := http.Get(path)
-	defer resp.Body.Close()
 	if err != nil {
             log.Fatalf("Error requesting images from Docker: %s", err)
 	}
@@ -167,6 +168,7 @@ func getImages() []*Image {
                     log.Fatalf("Error parsing image JSON: %s", err)
 		}
 	}
+	resp.Body.Close()
 	return images
 }
 
@@ -212,13 +214,11 @@ func pushContainerMetrics(jobs chan *Job, group *sync.WaitGroup) {
 	}
 }
 
-func listen(d time.Duration) {
+func syncDocker(d time.Duration) {
 	var (
 		updaterGroup = &sync.WaitGroup{}
 		pushGroup    = &sync.WaitGroup{}
-		// create chan with a 3 buffer, we use a 3 buffer to sync the go routines so that
-		// no more than 3 messages are being send to the server at one time
-		jobs = make(chan *Job, 3)
+		jobs = make(chan *Job, 2)
 	)
 
 	go updater(jobs, updaterGroup)
@@ -226,11 +226,23 @@ func listen(d time.Duration) {
 	for _ = range time.Tick(d) {
 		go pushContainers(jobs, pushGroup)
 		go pushImages(jobs, pushGroup)
-		go pushContainerMetrics(jobs, pushGroup)
-		pushGroup.Wait()
+	        pushGroup.Wait()
 	}
+	updaterGroup.Wait()
 
-	// wait for all request to finish processing before returning
+}
+
+func syncMetrics(d time.Duration) {
+        var (
+		updaterGroup = &sync.WaitGroup{}
+                metricGroup = &sync.WaitGroup{}
+                jobs = make(chan *Job, 1)
+        )
+	go updater(jobs, updaterGroup)
+        for _ = range time.Tick(d) {
+		go pushContainerMetrics(jobs, metricGroup)
+                metricGroup.Wait()
+        }
 	updaterGroup.Wait()
 }
 
@@ -288,10 +300,11 @@ func register() string {
 }
 
 func main() {
-	mem := getMemUsage(32438)
-	fmt.Printf("Memory: %v\n", mem)
-
 	duration, err := time.ParseDuration(fmt.Sprintf("%ds", runInterval))
+	if err != nil {
+            log.Fatal("Error parsing duration: %s", err)
+	}
+	metricDuration, err := time.ParseDuration(fmt.Sprintf("%ds", metricInterval))
 	if err != nil {
             log.Fatal("Error parsing duration: %s", err)
 	}
@@ -323,8 +336,9 @@ func main() {
 		log.Printf("Request from %s: %s\n", src, req.URL.Path)
 		director(req)
 	}
-
-	go listen(duration)
+        
+	go syncDocker(duration)
+	go syncMetrics(metricDuration)
 
 	if err := http.ListenAndServe(fmt.Sprintf("%s:%d", address, port), proxy); err != nil {
             log.Fatalf("Error listening on port %d: %s", port, err)

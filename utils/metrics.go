@@ -1,12 +1,14 @@
 package utils
 
 import (
+        "bytes"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"path"
 	"strconv"
 	"strings"
+        "os/exec"
 )
 
 type (
@@ -96,10 +98,6 @@ func GetContainerMetrics() []ContainerMetric {
 					log.Println(err)
 				}
 				// convert string pid to int
-				pid, err := strconv.Atoi(dir.Name())
-				if err != nil {
-					log.Println(err)
-				}
 				// check for lxc-start command
 				if strings.Index(string(cmdline), "lxc-start") == 0 {
 					// hack: split on -n and -f to get container id
@@ -107,9 +105,28 @@ func GetContainerMetrics() []ContainerMetric {
 					sID := strings.Split(cmdlineParts[1], "-f")
 					// remove \x00 characters from ID
 					containerID := strings.Trim(sID[0], "\x00")
+                                        // find all child process for container
+                                        c := exec.Command("lxc-ps", "-n", containerID, "--", "o", "pid")
+                                        var cOut bytes.Buffer
+                                        c.Stdout = &cOut
+                                        err = c.Run()
+                                        if err != nil {
+                                            log.Printf("Erroring getting metrics for %s: %s", containerID, err)
+                                            continue
+                                        }
+                                        cpu := 0
+                                        mem := 0
+                                        for _, s := range strings.Split(cOut.String(), "\n") {
+                                            if strings.Index(s, "CONTAINER") == -1 && s != "" {
+                                                f := strings.Fields(s)
+                                                pid, _ := strconv.Atoi(f[1])
+                                                cpu += GetCPUUsage(pid)
+                                                mem += GetMemoryUsage(pid)
+                                            }
+                                        }
+					cpuCounter := Counter{Name: "cpu", Value: cpu, Unit: "%"}
+					memCounter := Counter{Name: "memory", Value: mem, Unit: "kb"}
 					counters := make([]Counter, 2)
-					cpuCounter := Counter{Name: "cpu", Value: GetCPUUsage(pid), Unit: "%"}
-					memCounter := Counter{Name: "memory", Value: GetMemoryUsage(pid), Unit: "kb"}
 					counters[0] = cpuCounter
 					counters[1] = memCounter
 					// create metric
