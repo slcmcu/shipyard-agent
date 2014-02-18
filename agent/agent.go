@@ -313,8 +313,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	if registerAgent && shipyardKey == "" {
-		shipyardKey = register()
+	if registerAgent {
+		register()
+		os.Exit(0)
 	}
 
 	log.Printf("Shipyard Agent (%s)\n", shipyardURL)
