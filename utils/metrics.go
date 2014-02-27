@@ -37,6 +37,7 @@ func GetCPUUsage(pid int) int {
 		return -1
 	}
 	parts := strings.Split(string(stat), " ")
+	cpuUsage := 0
 	var (
 		utime, _     = strconv.Atoi(parts[14])
 		stime, _     = strconv.Atoi(parts[15])
@@ -46,8 +47,10 @@ func GetCPUUsage(pid int) int {
 		totalTime    = utime + stime + cutime + cstime
 		uptime, _    = strconv.Atoi(string(up))
 		seconds      = uptime - (startTime / 1000)
-		cpuUsage     = 100 * ((totalTime / 1000) / seconds)
 	)
+	if seconds > 0 {
+		cpuUsage = 100 * ((totalTime / 1000) / seconds)
+	}
 	return cpuUsage
 }
 
