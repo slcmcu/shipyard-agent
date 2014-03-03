@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-const VERSION string = "0.2.2"
+const VERSION string = "0.2.3"
 
 var (
 	dockerURL      string
@@ -49,7 +49,7 @@ type (
 		Created int
 		Image   string
 		Status  string
-		Command string
+		Command string `json:"string"`
 		Ports   []Port
 		Names   []string
 	}
