@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-const VERSION string = "0.2.4"
+const VERSION string = "0.2.5"
 
 var (
 	dockerURL      string
@@ -172,8 +172,19 @@ func getImages() []*Image {
 }
 
 func getContainerMetrics() []utils.ContainerMetric {
-	containerMetrics := utils.GetContainerMetrics()
-	return containerMetrics
+        var metrics []utils.ContainerMetric
+	containers := getContainers()
+	for _, c := range containers {
+		i := inspectContainer(c.Id)
+                pid := i.State.Pid
+                m, err := utils.GetContainerMetric(pid, c.Id)
+                if err != nil {
+                        log.Printf("Error getting metrics for %s: %s", c.Id, err)
+                        continue
+                }
+                metrics = append(metrics, m)
+        }
+	return metrics
 }
 
 func pushContainers(jobs chan *Job, group *sync.WaitGroup) {

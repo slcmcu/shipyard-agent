@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os/exec"
-	"path"
 	"strconv"
 	"strings"
 )
@@ -77,67 +76,42 @@ func GetMemoryUsage(pid int) int {
 	return res
 }
 
-// Check all running processes for docker containers and create
-// metrics for each
-func GetContainerMetrics() []ContainerMetric {
-	dirs, err := ioutil.ReadDir("/proc")
+// Check all running processes for a docker container and create a metric
+func GetContainerMetric(pid int, containerID string) (ContainerMetric, error) {
+	var metric ContainerMetric
+	// hack: split on -n and -f to get container id
+	//c := exec.Command("lxc-ps", "-n", containerID, "--", "o", "pid")
+	c := exec.Command("ps", "-eo", "ppid,pid", "--no-headers")
+	var cOut bytes.Buffer
+	c.Stdout = &cOut
+        err := c.Run()
 	if err != nil {
-		log.Println(err)
+		log.Printf("Erroring getting metrics for %s (PID %s): %s", containerID, pid, err)
+		return metric, err
 	}
-	var metrics []ContainerMetric
-	for _, dir := range dirs {
-		// get all process dirs
-		pidDir := path.Join("/proc", dir.Name())
-		isDir, _ := IsDir(pidDir)
-		// filter out "self" (current command)
-		if isDir && dir.Name() != "self" {
-			// make sure process has a cmdline file
-			cmdlinePath := path.Join(pidDir, "cmdline")
-			exists, _ := Exists(cmdlinePath)
-			if exists {
-				// read cmdline of process
-				cmdline, err := ioutil.ReadFile(cmdlinePath)
-				if err != nil {
-					log.Println(err)
-				}
-				// convert string pid to int
-				// check for lxc-start command
-				if strings.Index(string(cmdline), "lxc-start") == 0 {
-					// hack: split on -n and -f to get container id
-					cmdlineParts := strings.Split(string(cmdline), "-n")
-					sID := strings.Split(cmdlineParts[1], "-f")
-					// remove \x00 characters from ID
-					containerID := strings.Trim(sID[0], "\x00")
-					// find all child process for container
-					c := exec.Command("lxc-ps", "-n", containerID, "--", "o", "pid")
-					var cOut bytes.Buffer
-					c.Stdout = &cOut
-					err = c.Run()
-					if err != nil {
-						log.Printf("Erroring getting metrics for %s: %s", containerID, err)
-						continue
-					}
-					cpu := 0
-					mem := 0
-					for _, s := range strings.Split(cOut.String(), "\n") {
-						if strings.Index(s, "CONTAINER") == -1 && s != "" {
-							f := strings.Fields(s)
-							pid, _ := strconv.Atoi(f[1])
-							cpu += GetCPUUsage(pid)
-							mem += GetMemoryUsage(pid)
-						}
-					}
-					cpuCounter := Counter{Name: "cpu", Value: cpu, Unit: "%"}
-					memCounter := Counter{Name: "memory", Value: mem, Unit: "kb"}
-					counters := make([]Counter, 2)
-					counters[0] = cpuCounter
-					counters[1] = memCounter
-					// create metric
-					metric := ContainerMetric{ContainerID: containerID, Counters: counters, Type: "container"}
-					metrics = append(metrics, metric)
-				}
-			}
-		}
+	cpu := 0
+	mem := 0
+	for _, s := range strings.Split(cOut.String(), "\n") {
+		f := strings.Fields(s)
+                // skip blank lines
+                if len(f) != 2 { continue }
+                p, err := strconv.Atoi(f[1])
+                if err != nil {
+                    log.Printf("Error converting PID to in for metrics: %s", err)
+                    continue
+                }
+                // check for correct parent
+                if p == pid {
+		    cpu += GetCPUUsage(p)
+		    mem += GetMemoryUsage(p)
+                }
 	}
-	return metrics
+	cpuCounter := Counter{Name: "cpu", Value: cpu, Unit: "%"}
+	memCounter := Counter{Name: "memory", Value: mem, Unit: "kb"}
+	counters := make([]Counter, 2)
+	counters[0] = cpuCounter
+	counters[1] = memCounter
+	// create metric
+	metric = ContainerMetric{ContainerID: containerID, Counters: counters, Type: "container"}
+	return metric, nil
 }
