@@ -81,7 +81,7 @@ func init() {
 	flag.IntVar(&metricInterval, "metric-interval", 60, "Metric interval (seconds)")
 	flag.BoolVar(&registerAgent, "register", false, "Register Agent with Shipyard")
 	flag.BoolVar(&version, "version", false, "Shows Agent Version")
-	flag.StringVar(&address, "address", "", "Agent Listen Address (default: 0.0.0.0)")
+	flag.StringVar(&address, "address", "0.0.0.0", "Agent Listen Address (default: 0.0.0.0)")
 	flag.IntVar(&port, "port", 4500, "Agent Listen Port")
 
 	flag.Parse()
