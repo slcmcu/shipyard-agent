@@ -24,3 +24,9 @@ Subsequent agent runs just need the key:
 
 `./shipyard-agent -url http://myshipyardhost:shipyardport -key 1234567890qwertyuiop`
 
+# Docker
+You can now run this from within a container.
+
+`docker run -i -t --rm -v /var/run/docker.sock:/docker.sock -e URL=http://<shipyard-host>:8000 -p 4500:4500 shipyard/agent`
+
+Replace `<shipyard-host>` with your Shipyard host.
