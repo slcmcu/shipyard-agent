@@ -1,3 +1,18 @@
+/*
+   Copyright Evan Hazlett
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+*/
 package main
 
 import (
@@ -5,21 +20,21 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/dotcloud/docker"
-	"github.com/shipyard/shipyard-agent/utils"
 	"log"
 	"net"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gorilla/mux"
+	"github.com/shipyard/shipyard-agent/utils"
 )
 
-const VERSION string = "0.2.5"
+const VERSION string = "0.3.0"
 
 var (
 	dockerURL      string
@@ -37,26 +52,10 @@ type (
 	AgentData struct {
 		Key string `json:"key"`
 	}
-	Port struct {
-		IP          string
-		PrivatePort int
-		PublicPort  int
-		Type        string
-	}
-
-	APIContainer struct {
-		Id      string
-		Created int
-		Image   string
-		Status  string
-		Command string
-		Ports   []Port
-		Names   []string
-	}
 
 	ContainerData struct {
 		Container APIContainer
-		Meta      *docker.Container
+		Meta      *Container
 	}
 
 	Job struct {
@@ -74,7 +73,7 @@ type (
 )
 
 func init() {
-	flag.StringVar(&dockerURL, "docker", "http://127.0.0.1:4243", "URL to Docker")
+	flag.StringVar(&dockerURL, "docker", "/var/run/docker.sock", "URL to Docker")
 	flag.StringVar(&shipyardURL, "url", "", "Shipyard URL")
 	flag.StringVar(&shipyardKey, "key", "", "Shipyard Agent Key")
 	flag.IntVar(&runInterval, "interval", 5, "Run interval (seconds)")
@@ -121,11 +120,22 @@ func updater(jobs <-chan *Job, group *sync.WaitGroup) {
 }
 
 func getContainers() []APIContainer {
-	path := fmt.Sprintf("%s/containers/json?all=1", dockerURL)
-	resp, err := http.Get(path)
+	path := fmt.Sprintf("/containers/json?all=1")
+	c, err := utils.NewDockerClient(dockerURL)
+	defer c.Close()
+	if err != nil {
+		log.Fatalf("Error connecting to Docker: %s", err)
+	}
+	req, err := http.NewRequest("GET", path, nil)
 	if err != nil {
 		log.Fatalf("Error requesting containers from Docker: %s", err)
 	}
+
+	resp, err := c.Do(req)
+	if err != nil {
+		log.Fatalf("Error requesting containers from Docker: %s", err)
+	}
+
 	var containers []APIContainer
 	if resp.StatusCode == http.StatusOK {
 		d := json.NewDecoder(resp.Body)
@@ -137,13 +147,23 @@ func getContainers() []APIContainer {
 	return containers
 }
 
-func inspectContainer(id string) *docker.Container {
-	path := fmt.Sprintf("%s/containers/%s/json?all=1", dockerURL, id)
-	resp, err := http.Get(path)
+func inspectContainer(id string) *Container {
+	path := fmt.Sprintf("/containers/%s/json?all=1", id)
+	c, err := utils.NewDockerClient(dockerURL)
+	defer c.Close()
 	if err != nil {
-		log.Fatalf("Error inspecting container %s from Docker: %s", id, err)
+		log.Fatalf("Error connecting to Docker: %s", err)
 	}
-	var container *docker.Container
+	req, err := http.NewRequest("GET", path, nil)
+	if err != nil {
+		log.Fatalf("Error inspecting container from Docker: %s", err)
+	}
+	resp, err := c.Do(req)
+	if err != nil {
+		log.Fatalf("Error inspecting container from Docker: %s", err)
+	}
+
+	var container *Container
 	if resp.StatusCode == http.StatusOK {
 		d := json.NewDecoder(resp.Body)
 		if err = d.Decode(&container); err != nil {
@@ -155,11 +175,22 @@ func inspectContainer(id string) *docker.Container {
 }
 
 func getImages() []*Image {
-	path := fmt.Sprintf("%s/images/json?all=0", dockerURL)
-	resp, err := http.Get(path)
+	path := "/images/json?all=0"
+	c, err := utils.NewDockerClient(dockerURL)
+	defer c.Close()
+	if err != nil {
+		log.Fatalf("Error connecting to Docker: %s", err)
+	}
+	req, err := http.NewRequest("GET", path, nil)
 	if err != nil {
 		log.Fatalf("Error requesting images from Docker: %s", err)
 	}
+
+	resp, err := c.Do(req)
+	if err != nil {
+		log.Fatalf("Error requesting images from Docker: %s", err)
+	}
+
 	var images []*Image
 	if resp.StatusCode == http.StatusOK {
 		d := json.NewDecoder(resp.Body)
@@ -169,22 +200,6 @@ func getImages() []*Image {
 	}
 	resp.Body.Close()
 	return images
-}
-
-func getContainerMetrics() []utils.ContainerMetric {
-        var metrics []utils.ContainerMetric
-	containers := getContainers()
-	for _, c := range containers {
-		i := inspectContainer(c.Id)
-                pid := i.State.Pid
-                m, err := utils.GetContainerMetric(pid, c.Id)
-                if err != nil {
-                        log.Printf("Error getting metrics for %s: %s", c.Id, err)
-                        continue
-                }
-                metrics = append(metrics, m)
-        }
-	return metrics
 }
 
 func pushContainers(jobs chan *Job, group *sync.WaitGroup) {
@@ -214,16 +229,6 @@ func pushImages(jobs chan *Job, group *sync.WaitGroup) {
 	}
 }
 
-func pushContainerMetrics(jobs chan *Job, group *sync.WaitGroup) {
-	group.Add(1)
-	defer group.Done()
-	metrics := getContainerMetrics()
-	jobs <- &Job{
-		Path: "/agent/metrics/",
-		Data: metrics,
-	}
-}
-
 func syncDocker(d time.Duration) {
 	var (
 		updaterGroup = &sync.WaitGroup{}
@@ -240,20 +245,6 @@ func syncDocker(d time.Duration) {
 	}
 	updaterGroup.Wait()
 
-}
-
-func syncMetrics(d time.Duration) {
-	var (
-		updaterGroup = &sync.WaitGroup{}
-		metricGroup  = &sync.WaitGroup{}
-		jobs         = make(chan *Job, 1)
-	)
-	go updater(jobs, updaterGroup)
-	for _ = range time.Tick(d) {
-		go pushContainerMetrics(jobs, metricGroup)
-		metricGroup.Wait()
-	}
-	updaterGroup.Wait()
 }
 
 // Registers with Shipyard at the specified URL
@@ -314,10 +305,6 @@ func main() {
 	if err != nil {
 		log.Fatal("Error parsing duration: %s", err)
 	}
-	metricDuration, err := time.ParseDuration(fmt.Sprintf("%ds", metricInterval))
-	if err != nil {
-		log.Fatal("Error parsing duration: %s", err)
-	}
 
 	if shipyardURL == "" {
 		fmt.Println("Error: You must specify a Shipyard URL")
@@ -331,26 +318,25 @@ func main() {
 
 	log.Printf("Shipyard Agent (%s)\n", shipyardURL)
 	log.Printf("Listening on %s:%d", address, port)
-	u, err := url.Parse(dockerURL)
 	if err != nil {
 		log.Fatalf("Error connecting to Docker (is Docker listening on TCP?): %s", err)
 	}
 
-	var (
-		proxy    = httputil.NewSingleHostReverseProxy(u)
-		director = proxy.Director
-	)
-
-	proxy.Director = func(req *http.Request) {
-		src := strings.Split(req.RemoteAddr, ":")[0]
-		log.Printf("Request from %s: %s\n", src, req.URL.Path)
-		director(req)
-	}
-
 	go syncDocker(duration)
-	go syncMetrics(metricDuration)
 
-	if err := http.ListenAndServe(fmt.Sprintf("%s:%d", address, port), proxy); err != nil {
-		log.Fatalf("Error listening on port %d: %s", port, err)
+	// router
+	router := mux.NewRouter()
+	// Initialize and start HTTP server.
+	httpServer := &http.Server{
+		Addr:    fmt.Sprintf("%s:%d", address, port),
+		Handler: router,
 	}
+
+	// docker router
+	dockerRouter := NewDockerSubrouter(router)
+	// setup router
+	// addon docker router
+	router.Handle("/{apiVersion:v1.*}", dockerRouter).Methods("GET", "PUT", "POST", "DELETE")
+
+	httpServer.ListenAndServe()
 }
