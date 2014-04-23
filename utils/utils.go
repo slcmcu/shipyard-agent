@@ -36,7 +36,7 @@ func NewDockerClient(dockerSocketPath string) (*httputil.ClientConn, error) {
 }
 
 // Utility function for copying HTTP Headers.
-func CopyHeaders(dst, src http.Header) {
+func CopyHeaders(src, dst http.Header) {
 	for k, vv := range src {
 		for _, v := range vv {
 			dst.Add(k, v)
@@ -65,6 +65,7 @@ func ProxyLocalDockerRequest(w http.ResponseWriter, req *http.Request, dockerPat
 		w.Write([]byte(msg))
 		return
 	}
+	CopyHeaders(req.Header, r.Header)
 	resp, err := c.Do(r)
 	if err != nil {
 		msg := fmt.Sprintf("Error connecting to Docker: %s", err)

@@ -28,8 +28,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ehazlett/docker-hive/utils"
 	"github.com/gorilla/mux"
+	"github.com/shipyard/shipyard-agent/utils"
 )
 
 type (

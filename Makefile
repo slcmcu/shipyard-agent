@@ -1,7 +1,8 @@
 all:
-	@go get -d -v ./...
 	@cd ./agent && go build -o ../shipyard-agent
 
+get:
+	@go get -d -v ./...
 fmt:
 	@go fmt ./...
 test:

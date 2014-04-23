@@ -34,18 +34,18 @@ import (
 	"github.com/shipyard/shipyard-agent/utils"
 )
 
-const VERSION string = "0.3.0"
+const VERSION string = "0.3.1"
 
 var (
-	dockerURL      string
-	shipyardURL    string
-	shipyardKey    string
-	runInterval    int
-	metricInterval int
-	registerAgent  bool
-	version        bool
-	address        string
-	port           int
+	dockerURL     string
+	shipyardURL   string
+	shipyardKey   string
+	runInterval   int
+	apiVersion    string
+	registerAgent bool
+	version       bool
+	address       string
+	port          int
 )
 
 type (
@@ -77,7 +77,7 @@ func init() {
 	flag.StringVar(&shipyardURL, "url", "", "Shipyard URL")
 	flag.StringVar(&shipyardKey, "key", "", "Shipyard Agent Key")
 	flag.IntVar(&runInterval, "interval", 5, "Run interval (seconds)")
-	flag.IntVar(&metricInterval, "metric-interval", 60, "Metric interval (seconds)")
+	flag.StringVar(&apiVersion, "api-version", "v1.9", "Docker API Version to use")
 	flag.BoolVar(&registerAgent, "register", false, "Register Agent with Shipyard")
 	flag.BoolVar(&version, "version", false, "Shows Agent Version")
 	flag.StringVar(&address, "address", "0.0.0.0", "Agent Listen Address (default: 0.0.0.0)")
@@ -120,7 +120,7 @@ func updater(jobs <-chan *Job, group *sync.WaitGroup) {
 }
 
 func getContainers() []APIContainer {
-	path := fmt.Sprintf("/containers/json?all=1")
+	path := fmt.Sprintf("/%s/containers/json?all=1", apiVersion)
 	c, err := utils.NewDockerClient(dockerURL)
 	defer c.Close()
 	if err != nil {
@@ -148,7 +148,7 @@ func getContainers() []APIContainer {
 }
 
 func inspectContainer(id string) *Container {
-	path := fmt.Sprintf("/containers/%s/json?all=1", id)
+	path := fmt.Sprintf("/%s/containers/%s/json?all=1", apiVersion, id)
 	c, err := utils.NewDockerClient(dockerURL)
 	defer c.Close()
 	if err != nil {
@@ -175,7 +175,7 @@ func inspectContainer(id string) *Container {
 }
 
 func getImages() []*Image {
-	path := "/images/json?all=0"
+	path := fmt.Sprintf("/%s/images/json?all=0", apiVersion)
 	c, err := utils.NewDockerClient(dockerURL)
 	defer c.Close()
 	if err != nil {
