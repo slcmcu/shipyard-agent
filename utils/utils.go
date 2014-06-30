@@ -67,7 +67,9 @@ func ProxyLocalDockerRequest(w http.ResponseWriter, req *http.Request, dockerPat
 	}
 	CopyHeaders(req.Header, r.Header)
 	resp, err := c.Do(r)
-	if err != nil {
+
+	// Rely on the HTTP response status code for checking the error state
+	if resp.StatusCode > http.StatusNoContent {
 		msg := fmt.Sprintf("Error connecting to Docker: %s", err)
 		w.WriteHeader(resp.StatusCode)
 		w.Write([]byte(msg))
