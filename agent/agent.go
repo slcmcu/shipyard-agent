@@ -34,7 +34,7 @@ import (
 	"github.com/shipyard/shipyard-agent/utils"
 )
 
-const VERSION string = "0.3.1"
+const VERSION string = "0.3.2"
 
 var (
 	dockerURL     string
@@ -46,7 +46,7 @@ var (
 	version       bool
 	address       string
 	port          int
-	hostIP 				string
+	hostIP        string
 )
 
 type (
