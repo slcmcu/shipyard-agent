@@ -7,7 +7,11 @@ The Shipyard Agent will gather Docker information (containers, images, etc.) fro
 The recommended way to run the agent is with Docker.
 
 ## Docker
-`docker run -i -t --rm -v /var/run/docker.sock:/docker.sock -e URL=http://<shipyard-host>:8000 -p 4500:4500 shipyard/agent`
+```
+docker run -i -t -v /var/run/docker.sock:/docker.sock \
+  -e IP=`ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 | awk '{print $1;}'` \
+  -e URL=http://<shipyard-host>:8000 -p 4500:4500 shipyard/agent
+```
 
 Replace `<shipyard-host>` with your Shipyard host.
 
@@ -26,11 +30,10 @@ The first time you run the agent you must register it with Shipyard.  You can co
 
 `./shipyard-agent -url http://myshipyardhost:shipyardport -register`
 
-You will then need to authorize the host in 
-Shipyard.  Login to your Shipyard instance and select "Hosts".  Click on the 
+You will then need to authorize the host in
+Shipyard.  Login to your Shipyard instance and select "Hosts".  Click on the
 action menu for the host and select "Authorize Host".
 
 Subsequent agent runs just need the key:
 
 `./shipyard-agent -url http://myshipyardhost:shipyardport -key 1234567890qwertyuiop`
-
