@@ -46,6 +46,7 @@ var (
 	version       bool
 	address       string
 	port          int
+	hostIP 				string
 )
 
 type (
@@ -82,6 +83,7 @@ func init() {
 	flag.BoolVar(&version, "version", false, "Shows Agent Version")
 	flag.StringVar(&address, "address", "0.0.0.0", "Agent Listen Address (default: 0.0.0.0)")
 	flag.IntVar(&port, "port", 4500, "Agent Listen Port")
+	flag.StringVar(&hostIP, "ip", "", "External Hostname")
 
 	flag.Parse()
 
@@ -262,18 +264,19 @@ func register() string {
 		"127.0.0.1":   false,
 		"172.17.42.1": false,
 	}
-	var hostIP string
-	for _, addr := range addrs {
-		ip, _, err := net.ParseCIDR(addr.String())
-		if err != nil {
-			log.Fatalf("Error parsing CIDR from network address: %s", err)
-		}
-		// filter loopback
-		if !ip.IsLoopback() {
-			_, blocked := blockedIPs[string(ip)]
-			if !blocked {
-				hostIP = ip.String()
-				break
+	if hostIP == "" {
+		for _, addr := range addrs {
+			ip, _, err := net.ParseCIDR(addr.String())
+			if err != nil {
+				log.Fatalf("Error parsing CIDR from network address: %s", err)
+			}
+			// filter loopback
+			if !ip.IsLoopback() {
+				_, blocked := blockedIPs[string(ip)]
+				if !blocked {
+					hostIP = ip.String()
+					break
+				}
 			}
 		}
 	}
