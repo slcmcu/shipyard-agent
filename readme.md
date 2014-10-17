@@ -1,3 +1,5 @@
+NOTE: the agent is no longer used in Shipyard v2.  This repository is left here for legacy purposes.
+
 # Shipyard Agent
 This is the Shipyard Agent.  It goes on your Docker hosts.
 
